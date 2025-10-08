@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Play, Pause, Maximize, RotateCw, ChevronLeft, Info, X, Volume2, VolumeX, Minimize } from 'lucide-react';
+import Image from 'next/image';
 
 export default function VRVideoViewer() {
   const containerRef = useRef(null);
@@ -369,9 +370,11 @@ export default function VRVideoViewer() {
               {/* Header */}
               {/* Brand Header */}
             <div className="text-center mb-12">
-  <img
+  <Image
     src="/images/logo.png"
     alt="Tritorc Logo"
+    width={224}
+    height={64}
     className="mx-auto mb-4 w-40 md:w-56 animate-fade-in"
   />
   <p className="text-xl text-black">
