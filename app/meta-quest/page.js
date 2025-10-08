@@ -71,7 +71,7 @@ export default function WebXRCinema() {
       0.1,
       1000
     );
-    camera.position.set(0, 1.6, 3);
+camera.position.set(0, 0, 0.1);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
@@ -102,67 +102,21 @@ export default function WebXRCinema() {
     videoTexture.magFilter = THREE.LinearFilter;
 
     // Cinema screen (16:9 aspect ratio)
-    const screenWidth = 8;
-    const screenHeight = 4.5;
-    const screenGeometry = new THREE.PlaneGeometry(screenWidth, screenHeight);
-    const screenMaterial = new THREE.MeshBasicMaterial({ 
-      map: videoTexture,
-      side: THREE.DoubleSide
-    });
-    const screen = new THREE.Mesh(screenGeometry, screenMaterial);
-    screen.position.set(0, 1.6, -5);
-    scene.add(screen);
+    // 360° Video Sphere (inverted so video is visible from inside)
+const sphereRadius = 500;
+const sphereGeometry = new THREE.SphereGeometry(sphereRadius, 60, 40);
+// Flip the geometry inside-out
+sphereGeometry.scale(-1, 1, 1);
 
-    // Screen frame
-    const frameGeometry = new THREE.PlaneGeometry(screenWidth + 0.3, screenHeight + 0.3);
-    const frameMaterial = new THREE.MeshBasicMaterial({ 
-      color: 0x1a1a1a,
-      side: THREE.DoubleSide
-    });
-    const frame = new THREE.Mesh(frameGeometry, frameMaterial);
-    frame.position.set(0, 1.6, -5.01);
-    scene.add(frame);
+const sphereMaterial = new THREE.MeshBasicMaterial({ 
+  map: videoTexture
+});
+const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+scene.add(sphere);
 
     // Floor
-    const floorGeometry = new THREE.PlaneGeometry(50, 50);
-    const floorMaterial = new THREE.MeshBasicMaterial({ 
-      color: 0x0a0a0a,
-      side: THREE.DoubleSide
-    });
-    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = 0;
-    scene.add(floor);
-
-    // Grid on floor
-    const gridHelper = new THREE.GridHelper(50, 50, 0x333333, 0x1a1a1a);
-    scene.add(gridHelper);
-
-    // Ambient light
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
-    scene.add(ambientLight);
-
-    // Spotlight on screen
-    const spotlight = new THREE.SpotLight(0xffffff, 1);
-    spotlight.position.set(0, 5, 0);
-    spotlight.target = screen;
-    spotlight.angle = Math.PI / 6;
-    spotlight.penumbra = 0.3;
-    scene.add(spotlight);
-
-    // Add stars in the background
-    const starsGeometry = new THREE.BufferGeometry();
-    const starsMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05 });
-    const starsVertices = [];
-    for (let i = 0; i < 1000; i++) {
-      const x = (Math.random() - 0.5) * 100;
-      const y = Math.random() * 50 + 10;
-      const z = (Math.random() - 0.5) * 100;
-      starsVertices.push(x, y, z);
-    }
-    starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
-    const stars = new THREE.Points(starsGeometry, starsMaterial);
-    scene.add(stars);
+    // Note: Floor, grid, lights, and stars removed for 360° video experience
+// The video sphere is all-encompassing
 
     // Hotspot indicators
     const hotspotMeshes = [];
@@ -185,13 +139,13 @@ export default function WebXRCinema() {
     });
 
     sceneRef.current = { 
-      scene, 
-      camera, 
-      renderer, 
-      video, 
-      hotspotMeshes,
-      screen 
-    };
+  scene, 
+  camera, 
+  renderer, 
+  video, 
+  hotspotMeshes,
+  sphere 
+};
 
     // Mouse/touch controls for non-VR mode
     let isUserInteracting = false;
@@ -249,16 +203,17 @@ export default function WebXRCinema() {
       }
 
       // Camera rotation in non-VR mode
-      if (!renderer.xr.isPresenting) {
-        lat = Math.max(-85, Math.min(85, lat));
-        const phi = THREE.MathUtils.degToRad(90 - lat);
-        const theta = THREE.MathUtils.degToRad(lon);
+      // Camera rotation in non-VR mode for 360° video
+if (!renderer.xr.isPresenting) {
+  lat = Math.max(-85, Math.min(85, lat));
+  const phi = THREE.MathUtils.degToRad(90 - lat);
+  const theta = THREE.MathUtils.degToRad(lon);
 
-        camera.position.x = 3 * Math.sin(phi) * Math.cos(theta);
-        camera.position.y = 1.6 + 3 * Math.cos(phi);
-        camera.position.z = 3 + 3 * Math.sin(phi) * Math.sin(theta);
-        camera.lookAt(0, 1.6, -5);
-      }
+  // Keep camera at origin, just rotate the view
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = theta;
+  camera.rotation.x = -phi + Math.PI / 2;
+}
 
       renderer.render(scene, camera);
     };
@@ -280,29 +235,23 @@ export default function WebXRCinema() {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
 
     return () => {
-      renderer.setAnimationLoop(null);
-      window.removeEventListener('resize', handleResize);
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      renderer.domElement.removeEventListener('mousedown', onPointerDown);
-      renderer.domElement.removeEventListener('mousemove', onPointerMove);
-      renderer.domElement.removeEventListener('mouseup', onPointerUp);
-      renderer.domElement.removeEventListener('touchstart', onPointerDown);
-      renderer.domElement.removeEventListener('touchmove', onPointerMove);
-      renderer.domElement.removeEventListener('touchend', onPointerUp);
-      if (containerRef.current && renderer.domElement.parentNode) {
-        containerRef.current.removeChild(renderer.domElement);
-      }
-      renderer.dispose();
-      videoTexture.dispose();
-      screenGeometry.dispose();
-      screenMaterial.dispose();
-      frameGeometry.dispose();
-      frameMaterial.dispose();
-      floorGeometry.dispose();
-      floorMaterial.dispose();
-      starsGeometry.dispose();
-      starsMaterial.dispose();
-    };
+  renderer.setAnimationLoop(null);
+  window.removeEventListener('resize', handleResize);
+  document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  renderer.domElement.removeEventListener('mousedown', onPointerDown);
+  renderer.domElement.removeEventListener('mousemove', onPointerMove);
+  renderer.domElement.removeEventListener('mouseup', onPointerUp);
+  renderer.domElement.removeEventListener('touchstart', onPointerDown);
+  renderer.domElement.removeEventListener('touchmove', onPointerMove);
+  renderer.domElement.removeEventListener('touchend', onPointerUp);
+  if (containerRef.current && renderer.domElement.parentNode) {
+    containerRef.current.removeChild(renderer.domElement);
+  }
+  renderer.dispose();
+  videoTexture.dispose();
+  sphereGeometry.dispose();
+  sphereMaterial.dispose();
+};
   }, [selectedVideo, isMuted]);
 
   const enterVR = async () => {
