@@ -368,7 +368,7 @@ if (!renderer.xr.isPresenting) {
                 {!isVRSupported && (
                   <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg sm:rounded-xl p-3 sm:p-4 max-w-2xl mx-4 sm:mx-auto">
                     <p className="text-yellow-200 text-xs sm:text-sm">
-                      ⚠️ WebXR not detected. For the full VR experience, please open this on your Meta Quest browser.
+                      ⚠️ WebXR not detected. For the full VR experience, Piyush please open this on Meta Quest browser.
                     </p>
                   </div>
                 )}
