@@ -246,7 +246,7 @@ export default function VRVideoViewer() {
           <div className="bg-white rounded-lg p-8 max-w-md text-center">
             <h2 className="text-2xl font-bold mb-4">Enable Motion Sensors</h2>
             <p className="text-gray-600 mb-6">
-              For the best VR experience, allow access to your device's motion sensors. 
+              For the best VR experience, allow access to your device&apos;s motion sensors. 
               This lets you look around by moving your phone.
             </p>
             <button
