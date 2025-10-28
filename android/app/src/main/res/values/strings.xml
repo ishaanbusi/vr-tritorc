@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">vr-tritorc</string>
+    <string name="title_activity_main">vr-tritorc</string>
+    <string name="package_name">com.tritorc.vr</string>
+    <string name="custom_url_scheme">com.tritorc.vr</string>
+</resources>
