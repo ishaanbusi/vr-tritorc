@@ -57,7 +57,7 @@ export default function WebXRCinema() {
       ]
     },
     {
-      id: 4,
+      id: 5,
       title: "Tritorc Intro",
       url: "/videos/tritorc-intro.mp4",
       hotspots: [
@@ -68,12 +68,17 @@ export default function WebXRCinema() {
   ];
 
   useEffect(() => {
+    // ✅ Quest-compatible WebXR detection
     if ('xr' in navigator) {
       navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+        console.log('WebXR VR supported:', supported);
         setIsVRSupported(supported);
-      }).catch(() => {
+      }).catch((err) => {
+        console.error('WebXR check failed:', err);
         setIsVRSupported(false);
       });
+    } else {
+      console.log('WebXR not available in navigator');
     }
   }, []);
 
@@ -81,20 +86,25 @@ export default function WebXRCinema() {
     if (!containerRef.current || !selectedVideo) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000);
+    scene.background = new THREE.Color(0x0a0a0a);
 
+    // ✅ Quest-optimized camera setup
     const camera = new THREE.PerspectiveCamera(
       75,
       containerRef.current.clientWidth / containerRef.current.clientHeight,
       0.1,
       1000
     );
-camera.position.set(0, 0, 0.1);
+    camera.position.set(0, 1.6, 3); // Eye level for Quest
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    
+    // ✅ Quest-specific XR configuration
     renderer.xr.enabled = true;
+    renderer.xr.setReferenceSpaceType('local-floor'); // Use floor tracking
+
     containerRef.current.appendChild(renderer.domElement);
 
     // Create video element
@@ -118,23 +128,37 @@ camera.position.set(0, 0, 0.1);
     const videoTexture = new THREE.VideoTexture(video);
     videoTexture.minFilter = THREE.LinearFilter;
     videoTexture.magFilter = THREE.LinearFilter;
+    videoTexture.format = THREE.RGBFormat;
 
-    // Cinema screen (16:9 aspect ratio)
-    // 360° Video Sphere (inverted so video is visible from inside)
-const sphereRadius = 500;
-const sphereGeometry = new THREE.SphereGeometry(sphereRadius, 60, 40);
-// Flip the geometry inside-out
-sphereGeometry.scale(-1, 1, 1);
+    // ✅ FLAT cinema screen (not 360°)
+    const aspectRatio = 16 / 9;
+    const screenWidth = 8; // 8 meters wide
+    const screenHeight = screenWidth / aspectRatio;
+    
+    const screenGeometry = new THREE.PlaneGeometry(screenWidth, screenHeight);
+    const screenMaterial = new THREE.MeshBasicMaterial({ 
+      map: videoTexture,
+      side: THREE.DoubleSide
+    });
+    const screen = new THREE.Mesh(screenGeometry, screenMaterial);
+    
+    // Position screen in front of viewer at eye level
+    screen.position.set(0, 1.6, -6); // 6 meters away, at eye level
+    scene.add(screen);
 
-const sphereMaterial = new THREE.MeshBasicMaterial({ 
-  map: videoTexture
-});
-const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-scene.add(sphere);
+    // Add ambient lighting for better visibility
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    scene.add(ambientLight);
 
-    // Floor
-    // Note: Floor, grid, lights, and stars removed for 360° video experience
-// The video sphere is all-encompassing
+    // Add subtle environment
+    const floorGeometry = new THREE.PlaneGeometry(50, 50);
+    const floorMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0x111111,
+      side: THREE.DoubleSide 
+    });
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
 
     // Hotspot indicators
     const hotspotMeshes = [];
@@ -149,7 +173,7 @@ scene.add(sphere);
       
       // Position hotspots below the screen
       const xPos = (index - selectedVideo.hotspots.length / 2 + 0.5) * 1.5;
-      hotspotMesh.position.set(xPos, 0.5, -4);
+      hotspotMesh.position.set(xPos, 0.5, -5);
       hotspotMesh.userData = hotspot;
       
       scene.add(hotspotMesh);
@@ -157,13 +181,13 @@ scene.add(sphere);
     });
 
     sceneRef.current = { 
-  scene, 
-  camera, 
-  renderer, 
-  video, 
-  hotspotMeshes,
-  sphere 
-};
+      scene, 
+      camera, 
+      renderer, 
+      video, 
+      hotspotMeshes,
+      screen 
+    };
 
     // Mouse/touch controls for non-VR mode
     let isUserInteracting = false;
@@ -220,18 +244,17 @@ scene.add(sphere);
         });
       }
 
-      // Camera rotation in non-VR mode
-      // Camera rotation in non-VR mode for 360° video
-if (!renderer.xr.isPresenting) {
-  lat = Math.max(-85, Math.min(85, lat));
-  const phi = THREE.MathUtils.degToRad(90 - lat);
-  const theta = THREE.MathUtils.degToRad(lon);
+      // Camera rotation in non-VR mode (look around)
+      if (!renderer.xr.isPresenting) {
+        lat = Math.max(-85, Math.min(85, lat));
+        const phi = THREE.MathUtils.degToRad(90 - lat);
+        const theta = THREE.MathUtils.degToRad(lon);
 
-  // Keep camera at origin, just rotate the view
-  camera.rotation.order = 'YXZ';
-  camera.rotation.y = theta;
-  camera.rotation.x = -phi + Math.PI / 2;
-}
+        camera.position.x = 3 * Math.sin(theta) * Math.cos(phi);
+        camera.position.y = 1.6 + 3 * Math.sin(phi);
+        camera.position.z = 3 * Math.cos(theta) * Math.cos(phi);
+        camera.lookAt(screen.position);
+      }
 
       renderer.render(scene, camera);
     };
@@ -246,44 +269,48 @@ if (!renderer.xr.isPresenting) {
     };
     window.addEventListener('resize', handleResize);
 
-    // Fullscreen change listener
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
 
     return () => {
-  renderer.setAnimationLoop(null);
-  window.removeEventListener('resize', handleResize);
-  document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  renderer.domElement.removeEventListener('mousedown', onPointerDown);
-  renderer.domElement.removeEventListener('mousemove', onPointerMove);
-  renderer.domElement.removeEventListener('mouseup', onPointerUp);
-  renderer.domElement.removeEventListener('touchstart', onPointerDown);
-  renderer.domElement.removeEventListener('touchmove', onPointerMove);
-  renderer.domElement.removeEventListener('touchend', onPointerUp);
-  if (containerRef.current && renderer.domElement.parentNode) {
-    containerRef.current.removeChild(renderer.domElement);
-  }
-  renderer.dispose();
-  videoTexture.dispose();
-  sphereGeometry.dispose();
-  sphereMaterial.dispose();
-};
+      renderer.setAnimationLoop(null);
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      renderer.domElement.removeEventListener('mousedown', onPointerDown);
+      renderer.domElement.removeEventListener('mousemove', onPointerMove);
+      renderer.domElement.removeEventListener('mouseup', onPointerUp);
+      renderer.domElement.removeEventListener('touchstart', onPointerDown);
+      renderer.domElement.removeEventListener('touchmove', onPointerMove);
+      renderer.domElement.removeEventListener('touchend', onPointerUp);
+      if (containerRef.current && renderer.domElement.parentNode) {
+        containerRef.current.removeChild(renderer.domElement);
+      }
+      renderer.dispose();
+      videoTexture.dispose();
+      screenGeometry.dispose();
+      screenMaterial.dispose();
+    };
   }, [selectedVideo, isMuted]);
 
   const enterVR = async () => {
     if (sceneRef.current && isVRSupported) {
       try {
+        // ✅ Quest-compatible session request
         const session = await navigator.xr.requestSession('immersive-vr', {
-          optionalFeatures: ['local-floor', 'bounded-floor']
+          requiredFeatures: ['local-floor'],
+          optionalFeatures: ['bounded-floor', 'hand-tracking']
         });
+        
         await sceneRef.current.renderer.xr.setSession(session);
         setIsInVR(true);
         
         // Auto-play video when entering VR
         if (videoRef.current && !isPlaying) {
-          videoRef.current.play();
+          videoRef.current.play().catch(err => {
+            console.log('Video autoplay prevented:', err);
+          });
           setIsPlaying(true);
         }
 
@@ -292,7 +319,7 @@ if (!renderer.xr.isPresenting) {
         });
       } catch (err) {
         console.error('Failed to enter VR:', err);
-        alert('Failed to enter VR mode. Make sure you have a VR headset connected.');
+        alert('Failed to enter VR mode. Error: ' + err.message);
       }
     }
   };
@@ -331,14 +358,12 @@ if (!renderer.xr.isPresenting) {
   };
 
   const backToMenu = () => {
-    // Stop and cleanup video
     if (videoRef.current) {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
       videoRef.current.src = '';
     }
     
-    // Exit fullscreen if active
     if (document.fullscreenElement) {
       document.exitFullscreen();
     }
@@ -367,16 +392,14 @@ if (!renderer.xr.isPresenting) {
         <div className="absolute inset-0 overflow-y-auto bg-gradient-to-br from-gray-900 via-gray-800 to-black">
           <div className="min-h-full flex items-center justify-center p-4 sm:p-6 lg:p-8">
             <div className="max-w-7xl w-full">
-              {/* Header */}
-              <div className="text-center mb-3 ">
-               <img
-    src="/images/logo.png"
-    alt="Tritorc Logo"
-    className="mx-auto mb-4 w-40 md:w-56 animate-fade-in"
-  />
-
-</div>
-                <div className="mb-8 sm:mb-12 lg:mb-16 text-center">
+              <div className="text-center mb-3">
+                <img
+                  src="/images/logo.png"
+                  alt="Tritorc Logo"
+                  className="mx-auto mb-4 w-40 md:w-56 animate-fade-in"
+                />
+              </div>
+              <div className="mb-8 sm:mb-12 lg:mb-16 text-center">
                 <h2 className="text-xl sm:text-2xl lg:text-3xl text-white font-light mb-2 sm:mb-4 px-4">
                   Virtual Cinema Experience
                 </h2>
@@ -386,7 +409,7 @@ if (!renderer.xr.isPresenting) {
                 {!isVRSupported && (
                   <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg sm:rounded-xl p-3 sm:p-4 max-w-2xl mx-4 sm:mx-auto">
                     <p className="text-yellow-200 text-xs sm:text-sm">
-                      ⚠️ WebXR not detected. For the full VR experience, Piyush please open this on Meta Quest browser.
+                      ⚠️ WebXR not detected. For the full VR experience, please open this on Meta Quest browser.
                     </p>
                   </div>
                 )}
@@ -420,10 +443,9 @@ if (!renderer.xr.isPresenting) {
         </div>
       )}
 
-      {/* Video Player UI */}
+      {/* Video Player UI - Rest of the component remains the same */}
       {selectedVideo && !isInVR && (
         <>
-          {/* Top Bar */}
           <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/90 via-black/50 to-transparent p-3 sm:p-4 lg:p-6 z-10">
             <div className="flex items-center justify-between gap-2 sm:gap-4">
               <button
@@ -451,7 +473,6 @@ if (!renderer.xr.isPresenting) {
             </div>
           </div>
 
-          {/* Progress Bar */}
           <div className="absolute top-16 sm:top-20 lg:top-24 left-0 right-0 px-3 sm:px-4 lg:px-6 z-10">
             <div className="bg-white/20 backdrop-blur-sm rounded-full h-1 sm:h-1.5 overflow-hidden">
               <div 
@@ -465,7 +486,6 @@ if (!renderer.xr.isPresenting) {
             </div>
           </div>
 
-          {/* Bottom Controls */}
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3 sm:p-4 lg:p-6 z-10">
             <div className="flex items-center justify-center gap-2 sm:gap-3 mb-3 sm:mb-4 flex-wrap">
               <button
@@ -479,7 +499,6 @@ if (!renderer.xr.isPresenting) {
               <button
                 onClick={toggleMute}
                 className="bg-white/90 hover:bg-white text-gray-900 p-2 sm:p-3 rounded-full transition-all"
-                title={isMuted ? 'Unmute' : 'Mute'}
               >
                 {isMuted ? <VolumeX size={18} className="sm:w-5 sm:h-5" /> : <Volume2 size={18} className="sm:w-5 sm:h-5" />}
               </button>
@@ -487,13 +506,11 @@ if (!renderer.xr.isPresenting) {
               <button
                 onClick={toggleFullscreen}
                 className="bg-white/90 hover:bg-white text-gray-900 p-2 sm:p-3 rounded-full transition-all"
-                title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
               >
                 {isFullscreen ? <Minimize size={18} className="sm:w-5 sm:h-5" /> : <Maximize size={18} className="sm:w-5 sm:h-5" />}
               </button>
             </div>
 
-            {/* Hotspot Timeline */}
             <div className="flex justify-center gap-2 overflow-x-auto pb-2 px-2 scrollbar-hide">
               {selectedVideo.hotspots.map((hotspot, index) => (
                 <button
@@ -507,7 +524,6 @@ if (!renderer.xr.isPresenting) {
             </div>
           </div>
 
-          {/* Hotspot Info Modal */}
           {showHotspotInfo && (
             <div className="absolute inset-0 flex items-center justify-center z-20 p-4">
               <div 
@@ -547,7 +563,6 @@ if (!renderer.xr.isPresenting) {
         </>
       )}
 
-      {/* VR Mode Indicator */}
       {isInVR && (
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-4 sm:px-6 py-2 rounded-full font-semibold shadow-lg z-50 text-xs sm:text-sm">
           🥽 VR Mode Active
